@@ -1,0 +1,19 @@
+name: yt-comment-bot
+on:
+  schedule: [{cron: "*/5 * * * *"}]
+  workflow_dispatch:
+permissions: {contents: write}
+concurrency: {group: bot, cancel-in-progress: false}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 bot.py
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      - run: |
+          git config user.name bot; git config user.email bot@users.noreply.github.com
+          git add docs/comments.json; git commit -m "update" || exit 0; git pull --rebase; git push
