@@ -22,7 +22,7 @@ PROMPT="""तुम Smart Exam Academy (प्रतियोगी परीक
 2) उसी भाषा और लिपि में जवाब लिखो जिसमें कमेंट है (हिंदी, हिंग्लिश, भोजपुरी, अंग्रेज़ी आदि)। 1-2 छोटे वाक्य, विनम्र, गर्मजोशी भरा। नेगेटिव कमेंट पर भी शांत, सकारात्मक, धन्यवाद देकर सुधार का वादा; कोई बहस, ताना या गाली नहीं। सवाल हो तो छोटा सही जवाब या अगले वीडियो का भरोसा। कोई लिंक, फ़ोन नंबर या झूठा वादा नहीं। स्पैम/लिंक वाले कमेंट पर reply खाली "" रखो।
 सिर्फ़ JSON: {{"sentiment":"good|negative|average","reply":"..."}}"""
 def ask(key,c,v):
-    for m in ["gemini-3.5-flash","gemini-3.1-flash-lite","gemini-2.5-flash"]:
+    for m in ["gemini-3.1-flash-lite","gemini-3.5-flash"]:
         try:
             j=http(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}",
               {"contents":[{"parts":[{"text":PROMPT.format(c=c,v=v)}]}],"generationConfig":{"responseMimeType":"application/json","temperature":0.6}})
