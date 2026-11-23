@@ -1,19 +1,27 @@
 name: yt-comment-bot
 on:
-  schedule: [{cron: "*/5 * * * *"}]
+  schedule: [{cron: "*/30 * * * *"}]
   workflow_dispatch:
 permissions: {contents: write}
 concurrency: {group: bot, cancel-in-progress: false}
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
-      - run: python3 bot.py
+      - name: watch comments (every 2 min, ~5.5 h)
         env:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-      - run: |
+        run: |
           git config user.name bot; git config user.email bot@users.noreply.github.com
-          git add docs/comments.json; git commit -m "update" || exit 0; git pull --rebase; git push
+          end=$((SECONDS+19800))
+          while [ $SECONDS -lt $end ]; do
+            git pull -q --rebase || true
+            python3 bot.py || echo "run failed"
+            git add docs/comments.json
+            git commit -qm "update" && (git push -q || (git pull -q --rebase && git push -q)) || true
+            sleep 120
+          done
