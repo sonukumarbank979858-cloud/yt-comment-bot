@@ -36,8 +36,8 @@ def main():
     at=token(); H={"Authorization":"Bearer "+at}; key=gemini_key()
     q=urllib.parse.urlencode({"part":"snippet,replies","allThreadsRelatedToChannelId":CH,"maxResults":50,"order":"time","textFormat":"plainText"})
     th=http("https://www.googleapis.com/youtube/v3/commentThreads?"+q,headers=H).get("items",[])
-    vids={}; n=0
-    for t in reversed(th):
+    vids={}; n=0; new=[]
+    for t in th:
         if t["id"] in seen: continue
         s=t["snippet"]["topLevelComment"]["snippet"]
         if s.get("authorChannelId",{}).get("value")==CH: continue
@@ -57,8 +57,8 @@ def main():
                 item["reply"]=o["reply"]; item["status"]="replied"; n+=1
             except Exception as e: print("reply fail",e); continue
         elif o.get("reply"): continue  # over limit, try next run
-        st["items"].insert(0,item); seen.add(t["id"]); time.sleep(1)
-    st["items"]=st["items"][:2000]; st["updated"]=time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime())
+        new.append(item); seen.add(t["id"]); time.sleep(1)
+    st["items"]=(new+st["items"])[:2000]; st["updated"]=time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime())
     json.dump(st,open(STATE,"w"),ensure_ascii=False,indent=0)
     print("replied",n)
 main()
