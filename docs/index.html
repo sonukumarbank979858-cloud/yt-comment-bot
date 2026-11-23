@@ -1,0 +1,11 @@
+<!doctype html><html lang="hi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>कमेंट रिपोर्ट</title>
+<style>body{font-family:sans-serif;margin:0;background:#f5f5f7}header{background:#c00;color:#fff;padding:14px}h1{margin:0;font-size:19px}.tabs{display:flex;gap:6px;padding:10px;flex-wrap:wrap}.tabs button{border:0;border-radius:18px;padding:8px 12px;background:#fff}.tabs button.on{background:#222;color:#fff}.c{background:#fff;margin:8px 10px;padding:10px;border-radius:10px;border-left:5px solid #999}.good{border-color:#2a2}.negative{border-color:#d22}.average{border-color:#e90}.a{font-weight:bold;font-size:14px}.v{color:#666;font-size:12px}.r{background:#eef;padding:6px;border-radius:6px;margin-top:6px;font-size:14px}</style>
+<header><h1>Smart Exam Academy · कमेंट रिपोर्ट</h1><div id="u" style="font-size:12px"></div></header><div class="tabs" id="t"></div><div id="l"></div>
+<script>
+const N={all:"सभी",good:"😊 अच्छे",negative:"😠 नेगेटिव",average:"😐 औसत"};let D=[],F="all";
+function draw(){const c={all:D.length,good:0,negative:0,average:0};D.forEach(i=>c[i.sentiment]++);
+t.innerHTML=Object.keys(N).map(k=>`<button class="${k==F?'on':''}" onclick="F='${k}';draw()">${N[k]} (${c[k]})</button>`).join("");
+const e=s=>s.replace(/[&<>]/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[x]));
+l.innerHTML=D.filter(i=>F=="all"||i.sentiment==F).map(i=>`<div class="c ${i.sentiment}"><div class="a">${e(i.author)}</div><div>${e(i.text)}</div><div class="v">${e(i.video)} · ${new Date(i.time).toLocaleString('hi-IN')}</div>${i.reply?`<div class="r">↪ ${e(i.reply)}</div>`:`<div class="v">${i.status}</div>`}</div>`).join("")}
+fetch("comments.json?"+Date.now()).then(r=>r.json()).then(j=>{D=j.items;u.textContent="अपडेट: "+(j.updated||"-");draw()})
+</script></html>
