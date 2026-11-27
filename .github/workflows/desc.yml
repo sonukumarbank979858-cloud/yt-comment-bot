@@ -1,0 +1,28 @@
+name: description-tool
+on:
+  workflow_dispatch:
+    inputs:
+      mode: {description: "preview or apply", default: "preview"}
+  schedule: [{cron: "30 20 * * *"}]
+permissions: {contents: write}
+concurrency: {group: desc, cancel-in-progress: false}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: run
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          LINK: ${{ vars.DESC_LINK }}
+          LINE: ${{ vars.DESC_LINE }}
+          MODE: ${{ github.event.inputs.mode || vars.DESC_DAILY_MODE || 'none' }}
+        run: |
+          git config user.name bot; git config user.email bot@users.noreply.github.com
+          if [ "$MODE" = none ]; then echo skip; exit 0; fi
+          python3 desc.py || echo failed
+          git add docs/desc_*.json || true
+          git commit -qm "desc $MODE" && (git push -q || (git pull -q --rebase && git push -q)) || true
