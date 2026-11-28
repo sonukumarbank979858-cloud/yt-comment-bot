@@ -143,7 +143,10 @@ def seo_preview(H,key):
     full=[]
     for k in range(0,len(vids),50):
         full+=http(Y+"videos?part=snippet,status&id="+",".join(v["id"] for v in vids[k:k+50]),headers=H)["items"]
-    un=[v for v in full if v["status"]["privacyStatus"]=="unlisted"]
+    print("uploads",len(vids),"fetched",len(full))
+    un=[v for v in full if v["status"]["privacyStatus"]!="public"]
+    for v in un: print("NONPUBLIC",v["id"],v["status"]["privacyStatus"],v["status"].get("uploadStatus"),v["snippet"]["title"][:60])
+    un=[v for v in un if v["status"]["privacyStatus"]=="unlisted"]
     print("unlisted",len(un))
     pl=playlists(H); names=list(pl.keys()); inpl={x for p in pl.values() for x in p["videos"]}
     prev={i["id"]:i for i in json.load(open(PREV))["items"]} if os.path.exists(PREV) else {}
