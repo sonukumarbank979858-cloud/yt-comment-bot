@@ -35,5 +35,5 @@ jobs:
         run: |
           git config user.name bot; git config user.email bot@users.noreply.github.com
           python3 desc.py || echo failed
-          git add docs/auto_log.json docs/thumbs 2>/dev/null || true
+          git add -A docs || true
           git commit -qm "auto publish" && (git push -q || (git pull -q --rebase && git push -q)) || true
