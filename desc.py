@@ -128,6 +128,68 @@ def apply(H):
         json.dump(done,open(DONE,"w"),indent=0)
     print("applied",n,"total done",len(done))
 
+SP="""तुम Smart Exam Academy (प्रतियोगी/बोर्ड/यूनिवर्सिटी परीक्षा की पढ़ाई का YouTube चैनल) के लिए YouTube SEO करते हो।
+वीडियो title: «{t}»
+description: «{d}»
+tags: {g}
+काम: इसी वीडियो के विषय के अनुसार search में आने लायक SEO करो। title: 100 अक्षर से कम, मुख्य keyword शुरू में, विषय/अध्याय/परीक्षा का नाम, हिंदी+English keywords मिलाकर (जैसे अभी हैं), clickbait या झूठ नहीं। description: पहली 2 लाइनों में मुख्य keywords, फिर 3-6 लाइनों में वीडियो में क्या है, अंत में 3-5 hashtags; timestamps हों तो रखो; कोई लिंक/फ़ोन नंबर नहीं। tags: 10-20 relevant tags (हिंदी व English), कुल 450 अक्षर से कम।
+सिर्फ़ JSON: {{"title":"...","description":"...","tags":["..."]}}"""
+SPV="docs/seo_preview.json"; SDONE="docs/seo_done.json"
+def seo_preview(H,key):
+    vids=all_videos(H); out=[]
+    full=[]
+    for k in range(0,len(vids),50):
+        full+=http(Y+"videos?part=snippet,status&id="+",".join(v["id"] for v in vids[k:k+50]),headers=H)["items"]
+    un=[v for v in full if v["status"]["privacyStatus"]=="unlisted"]
+    print("unlisted",len(un))
+    pl=playlists(H); names=list(pl.keys()); inpl={x for p in pl.values() for x in p["videos"]}
+    prev={i["id"]:i for i in json.load(open(PREV))["items"]} if os.path.exists(PREV) else {}
+    for v in un:
+        s=v["snippet"]; d=URL.sub("",s.get("description",""))
+        o=g(key,SP.format(t=s["title"],d=d[:4000],g=json.dumps(s.get("tags",[]),ensure_ascii=False))) or {}
+        th=s.get("thumbnails",{}); thumb=(th.get("maxres") or th.get("high") or th.get("medium") or {}).get("url","")
+        p=prev.get(v["id"],{}).get("playlist","")
+        if not p and v["id"] not in inpl:
+            r=g(key,PP.format(pl=json.dumps(names,ensure_ascii=False),v=f'{v["id"]}: {s["title"]}')) or {}
+            p=(r.get(v["id"]) or "").strip()[:140]
+        out.append({"id":v["id"],"oldTitle":s["title"],"title":(o.get("title") or s["title"])[:100],"old":s.get("description",""),
+            "new":o.get("description") or d,"tags":o.get("tags") or s.get("tags",[]),"thumb":thumb,"playlist":p,"newPlaylist":bool(p) and p not in pl})
+        json.dump({"items":out,"updated":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime())},open(SPV,"w"),ensure_ascii=False,indent=0)
+    json.dump({"items":out,"updated":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime())},open(SPV,"w"),ensure_ascii=False,indent=0)
+    print("seo preview",len(out))
+def seo_apply(H):
+    pv=json.load(open(SPV)); done=json.load(open(SDONE)) if os.path.exists(SDONE) else {}
+    pl=playlists(H); n=0
+    for it in pv["items"]:
+        if it["id"] in done or n>=MAXAPPLY: continue
+        v=http(Y+"videos?part=snippet,status&id="+it["id"],headers=H)["items"]
+        if not v: continue
+        sn=v[0]["snippet"]; st=v[0]["status"]
+        tail=("\n\n"+(LINE+"\n" if LINE else "")+LINK) if LINK else ""
+        tags=[]; tot=0
+        for t in it["tags"]:
+            if tot+len(t)+2>480: break
+            tags.append(t); tot+=len(t)+2
+        sn2={"title":it["title"],"categoryId":sn["categoryId"],"description":(it["new"].strip()+tail)[:4900],"tags":tags}
+        for k in("defaultLanguage","defaultAudioLanguage"):
+            if sn.get(k): sn2[k]=sn[k]
+        st2={"privacyStatus":"public","embeddable":st.get("embeddable",True),"publicStatsViewable":st.get("publicStatsViewable",True)}
+        if "selfDeclaredMadeForKids" in st: st2["selfDeclaredMadeForKids"]=st["selfDeclaredMadeForKids"]
+        try:
+            http(Y+"videos?part=snippet,status",{"id":it["id"],"snippet":sn2,"status":st2},H,method="PUT")
+            p=it.get("playlist")
+            if p:
+                if p not in pl:
+                    r=http(Y+"playlists?part=snippet,status",{"snippet":{"title":p},"status":{"privacyStatus":"public"}},H); pl[p]={"id":r["id"],"videos":set()}
+                if it["id"] not in pl[p]["videos"]:
+                    http(Y+"playlistItems?part=snippet",{"snippet":{"playlistId":pl[p]["id"],"resourceId":{"kind":"youtube#video","videoId":it["id"]}}},H); pl[p]["videos"].add(it["id"])
+            done[it["id"]]=time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime()); n+=1
+        except Exception as e:
+            b_=getattr(e,"read",lambda:b"")()[:400].decode("utf8","ignore"); print("fail",it["id"],e,b_)
+            if "quota" in b_.lower(): break
+        json.dump(done,open(SDONE,"w"),indent=0)
+    print("published",n)
+
 if __name__=="__main__":
     H={"Authorization":"Bearer "+token()}
-    preview(H,gemini_key()) if MODE=="preview" else apply(H)
+    {"preview":lambda:preview(H,gemini_key()),"apply":lambda:apply(H),"seo_preview":lambda:seo_preview(H,gemini_key()),"seo_apply":lambda:seo_apply(H)}[MODE]()

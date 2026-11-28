@@ -2,7 +2,7 @@ name: description-tool
 on:
   workflow_dispatch:
     inputs:
-      mode: {description: "preview or apply", default: "preview"}
+      mode: {description: "preview | apply | seo_preview | seo_apply", default: "preview"}
   schedule: [{cron: "30 20 * * *"}]
 permissions: {contents: write}
 concurrency: {group: desc, cancel-in-progress: false}
@@ -24,5 +24,5 @@ jobs:
           git config user.name bot; git config user.email bot@users.noreply.github.com
           if [ "$MODE" = none ]; then echo skip; exit 0; fi
           python3 desc.py || echo failed
-          git add docs/desc_*.json || true
+          git add docs/desc_*.json docs/seo_*.json || true
           git commit -qm "desc $MODE" && (git push -q || (git pull -q --rebase && git push -q)) || true

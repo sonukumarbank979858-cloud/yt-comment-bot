@@ -1,0 +1,17 @@
+<!doctype html><html lang="hi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SEO preview — Smart Exam Academy</title>
+<style>body{font-family:system-ui,sans-serif;margin:0;background:#f5f5f7;color:#222}h1{font-size:19px;margin:0;padding:14px;background:#c4302b;color:#fff}
+#s{padding:8px 14px;font-size:14px}.c{background:#fff;margin:10px;border-radius:12px;padding:12px;box-shadow:0 1px 3px #0002}
+.t{font-weight:600;margin-bottom:6px}.l{font-size:12px;color:#666;margin-top:8px}pre{white-space:pre-wrap;font:13px/1.45 system-ui;margin:4px 0;padding:8px;border-radius:8px}
+.o{background:#fdecea}.n{background:#e8f5e9}.p{display:inline-block;background:#e3f2fd;border-radius:20px;padding:3px 10px;font-size:13px;margin-top:8px}
+.d{color:#2e7d32;font-size:13px}</style>
+<h1>📝 Unlisted → Public (SEO)</h1><div id="s">लोड हो रहा है…</div><div id="L"></div>
+<script>
+Promise.all([fetch('seo_preview.json?'+Date.now()).then(r=>r.json()),fetch('seo_done.json?'+Date.now()).then(r=>r.ok?r.json():{}).catch(()=>({}))]).then(([p,d])=>{
+const np0=new Set(p.items.filter(i=>i.newPlaylist).map(i=>i.playlist));
+s.textContent=`Unlisted वीडियो ${p.items.length} · public हो चुके ${Object.keys(d).length} · अपडेट ${p.updated}`;
+const e=x=>(x||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+L.innerHTML=p.items.map(i=>`<div class=c>${i.thumb?`<img src='${i.thumb}' style='width:100%;border-radius:8px'>`:''}<div class=l>पुराना title</div><div>${e(i.oldTitle)}</div><div class=l>नया title</div><div class=t>${e(i.title)}</div>${d[i.id]?'<div class=d>✅ Public हो गया</div>':''}
+<div class=l>पहले</div><pre class=o>${e(i.old)||'(खाली)'}</pre><div class=l>अब</div><pre class=n>${e(i.new)}</pre><div class=l>Tags</div><div style='font-size:12px'>${e((i.tags||[]).join(', '))}</div>
+${i.playlist?`<span class=p>📂 ${e(i.playlist)}${i.newPlaylist?' (नई)':''}</span>`:'<span class=p>📂 पहले से playlist में</span>'}</div>`).join('')}).catch(()=>s.textContent='अभी preview तैयार नहीं हुआ।')
+</script></html>
