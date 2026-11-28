@@ -38,4 +38,5 @@ jobs:
           git config user.name bot; git config user.email bot@users.noreply.github.com
           python3 desc.py || echo failed
           git add -A docs || true
-          git commit -qm "auto publish" && (git push -q || (git pull -q --rebase && git push -q)) || true
+          git commit -qm "auto seo log" || true
+          for i in 1 2 3 4 5; do git pull -q --rebase -X theirs && git push -q && break; sleep 7; done

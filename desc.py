@@ -303,7 +303,12 @@ def auto(H,key):
         st=v["status"]; st2={"privacyStatus":"public" if PUB else st["privacyStatus"],"embeddable":st.get("embeddable",True),"publicStatsViewable":st.get("publicStatsViewable",True)}
         if "selfDeclaredMadeForKids" in st: st2["selfDeclaredMadeForKids"]=st["selfDeclaredMadeForKids"]
         try:
-            http(Y+"videos?part=snippet,status",{"id":v["id"],"snippet":sn2,"status":st2},H,method="PUT"); entry["status"]=st2["privacyStatus"]
+            for _a in range(3):
+                try: http(Y+"videos?part=snippet,status",{"id":v["id"],"snippet":sn2,"status":st2},H,method="PUT"); break
+                except Exception as e_:
+                    if "409" in str(e_) and _a<2: print("409 retry",v["id"]); time.sleep(20); continue
+                    raise
+            entry["status"]=st2["privacyStatus"]
             if p:
                 if p not in pl:
                     rr_=http(Y+"playlists?part=snippet,status",{"snippet":{"title":p},"status":{"privacyStatus":"public"}},H); pl[p]={"id":rr_["id"],"videos":set()}
