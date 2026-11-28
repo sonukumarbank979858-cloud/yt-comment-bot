@@ -221,8 +221,8 @@ tags: {g}
 साथ में वीडियो का अभी का thumbnail है। असली विषय (कक्षा/सेमेस्टर, विषय, इकाई/अध्याय, यूनिवर्सिटी) title, description और thumbnail पर लिखे टेक्स्ट से पहचानो। title में सिर्फ़ तारीख़ हो तो उसे विषय मत मानो; अंदाज़े से "Current Affairs" मत लिखो।
 1) designed: thumbnail पहले से डिज़ाइन किया हुआ है (बड़ा शीर्षक/चैनल नाम/टेक्स्ट वाला) तो true, अगर वीडियो का साधारण frame/धुंधला/खाली है तो false।
 2) SEO: title (100 अक्षर से कम, मुख्य keyword शुरू में, हिंदी+English), description (पहली 2 लाइनों में keywords, 3-6 लाइनें सामग्री, अंत में 3-5 hashtags, कोई लिंक/फ़ोन नहीं), tags (10-20, कुल 450 अक्षर से कम)।
-3) thumbnail के लिए: badge (जैसे "BA 1st Semester • हिंदी", 30 अक्षर तक), corner (जैसे "LNMU 2026" या "Class 12", 15 अक्षर तक, न हो तो ""), headline (हिंदी में 2-5 शब्द, बड़ा मुख्य विषय), sub (2-3 शब्द, जैसे "संपूर्ण व्याख्या" या "MCQ + PYQ"), points (3 छोटी लाइनें, हर एक 5 शब्द तक, वीडियो में क्या है), image_prompt (English में विषय से जुड़ी एक साफ़ illustration का वर्णन, बिना किसी text के, जैसे "ancient Indian saint teaching disciples in a temple")।
-सिर्फ़ JSON: {{"designed":true,"title":"...","description":"...","tags":["..."],"badge":"...","corner":"...","headline":"...","sub":"...","points":["..."],"image_prompt":"..."}}"""
+3) thumbnail (चैनल की शैली) के लिए: top (ऊपर का banner, आम तौर पर "सभी शैक्षिक एवं प्रतियोगी परीक्षाओं के लिए" या "BA 1st Semester • LNMU 2026" जैसा), subject (विषय हिंदी में 1-2 शब्द, जैसे "गणित", "भौतिक विज्ञान", "हिंदी"), subject_en (जैसे "Math"), chapter (जैसे "अध्याय - 3" या "BA 1st Semester" या "MCQ 2026"), topic (मुख्य विषय हिंदी में 1-4 शब्द, सबसे बड़ा), topic_en (English नाम या "LNMU MCQ 2026"), checklist (6-8 छोटे बिंदु, हर एक 4 शब्द तक, वीडियो में क्या-क्या है), fact_title (जैसे "महत्वपूर्ण सूत्र" या "याद रखें"), facts (2-4 छोटी लाइनें: सूत्र/उदाहरण/तथ्य, बिल्कुल सही), footer (3 छोटे शब्द-समूह, जैसे ["संपूर्ण थ्योरी","महत्वपूर्ण सूत्र","MCQ + PYQ"]), image_prompt (English में विषय से जुड़ा चित्र: व्यक्ति/वस्तु, बिना text)।
+सिर्फ़ JSON: {{"designed":true,"title":"...","description":"...","tags":["..."],"top":"...","subject":"...","subject_en":"...","chapter":"...","topic":"...","topic_en":"...","checklist":["..."],"fact_title":"...","facts":["..."],"footer":["..."],"image_prompt":"..."}}"""
 ALOG="docs/auto_log.json"
 def set_thumb(H,vid,jpg):
     r=urllib.request.Request("https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId="+vid,data=jpg,method="POST",
@@ -239,6 +239,12 @@ def auto(H,key):
     if not un: return
     log=json.load(open(ALOG)) if os.path.exists(ALOG) else {"items":[]}
     pl=playlists(H); names=list(pl.keys())
+    global LOGO; LOGO=None
+    try:
+        from PIL import Image as _I; import io as _io
+        cu=http(Y+"channels?part=snippet&id="+CH,headers=H)["items"][0]["snippet"]["thumbnails"]["high"]["url"]
+        LOGO=_I.open(_io.BytesIO(urllib.request.urlopen(cu,timeout=30).read()))
+    except Exception as e: print("logo",e)
     for v in un[:MAXAPPLY]:
         s=v["snippet"]; d=URL.sub("",s.get("description",""))
         th=s.get("thumbnails",{}); turl=(th.get("maxres") or th.get("standard") or th.get("high") or th.get("medium") or {}).get("url","")
@@ -250,10 +256,9 @@ def auto(H,key):
         entry={"id":v["id"],"oldTitle":s["title"],"title":o["title"][:100],"time":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime()),"thumb":"kept"}
         try:
             if FORCE or not o.get("designed",True):
-                art=thumb.ai_image(o.get("image_prompt") or o["title"],key)
-                jpg=thumb.make(o,art)
+                jpg,how=thumb.build(o,key,LOGO)
                 os.makedirs("docs/thumbs",exist_ok=True); open(f"docs/thumbs/{v['id']}.jpg","wb").write(jpg)
-                set_thumb(H,v["id"],jpg); entry["thumb"]="new"+("" if art else " (बिना चित्र)")
+                set_thumb(H,v["id"],jpg); entry["thumb"]="new: "+how
         except Exception as e:
             b_=getattr(e,"read",lambda:b"")()[:300].decode("utf8","ignore"); print("thumb set fail",e,b_); entry["thumb"]="fail: "+b_[:120]
         r=g(key,PP.format(pl=json.dumps(names,ensure_ascii=False),v=f'{v["id"]}: {o["title"]}')) or {}
