@@ -183,7 +183,7 @@ def seo_apply(H):
         sn2={"title":it["title"],"categoryId":sn["categoryId"],"description":(it["new"].strip()+tail)[:4900],"tags":tags}
         for k in("defaultLanguage","defaultAudioLanguage"):
             if sn.get(k): sn2[k]=sn[k]
-        st2={"privacyStatus":"public","embeddable":st.get("embeddable",True),"publicStatsViewable":st.get("publicStatsViewable",True)}
+        st2={"privacyStatus":"public" if PUB else st["privacyStatus"],"embeddable":st.get("embeddable",True),"publicStatsViewable":st.get("publicStatsViewable",True)}
         if "selfDeclaredMadeForKids" in st: st2["selfDeclaredMadeForKids"]=st["selfDeclaredMadeForKids"]
         try:
             http(Y+"videos?part=snippet,status",{"id":it["id"],"snippet":sn2,"status":st2},H,method="PUT"); print("updated",it["id"])
@@ -228,9 +228,32 @@ def set_thumb(H,vid,jpg):
     r=urllib.request.Request("https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId="+vid,data=jpg,method="POST",
         headers={**H,"Content-Type":"image/jpeg"})
     with urllib.request.urlopen(r,timeout=120) as f: return json.loads(f.read() or b"{}")
+def transcript(H,key,vid):
+    """Owner captions first (incl. auto-generated), else Gemini watches the video URL."""
+    try:
+        cl=http(Y+"captions?part=snippet&videoId="+vid,headers=H).get("items",[])
+        cl.sort(key=lambda c:(c["snippet"].get("trackKind")=="asr", c["snippet"].get("language")!="hi"))
+        for c in cl:
+            try:
+                r=urllib.request.Request("https://www.googleapis.com/youtube/v3/captions/"+c["id"]+"?tfmt=srt",headers=H)
+                t=urllib.request.urlopen(r,timeout=60).read().decode("utf8","ignore")
+                t=re.sub(r"\d+\n[\d:,]+ --> [\d:,]+\n","",t); t=re.sub(r"\n+"," ",t)
+                if len(t)>200: print("captions",vid,len(t)); return t[:15000]
+            except Exception as e: print("cap dl",vid,str(e)[:80])
+    except Exception as e: print("cap list",vid,str(e)[:80])
+    for m in ["gemini-3.1-flash-lite","gemini-2.5-flash"]:
+        try:
+            body={"contents":[{"parts":[{"file_data":{"file_uri":"https://www.youtube.com/watch?v="+vid}},{"text":"इस वीडियो में पढ़ाए गए सभी मुख्य विषय, प्रश्न, सूत्र और बातें हिंदी में विस्तार से (300-500 शब्द) लिखो।"}]}]}
+            r=urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}",data=json.dumps(body).encode(),headers={"Content-Type":"application/json"})
+            j=json.load(urllib.request.urlopen(r,timeout=300)); t=j["candidates"][0]["content"]["parts"][0]["text"]
+            print("gemini watched",vid,m,len(t)); return t
+        except Exception as e: print("gemini watch",vid,m,str(e)[:80])
+    return ""
+
 def auto(H,key):
     import base64, thumb
     FORCE=os.environ.get("FORCE_THUMB","")=="1"
+    PUB=os.environ.get("PUBLISH","0")=="1"; DOTHUMB=os.environ.get("THUMB","0")=="1" or FORCE
     vids=all_videos(H); full=[]
     for k in range(0,len(vids),50):
         full+=http(Y+"videos?part=snippet,status&id="+",".join(v["id"] for v in vids[k:k+50]),headers=H)["items"]
@@ -238,6 +261,9 @@ def auto(H,key):
     print("uploads",len(vids),"unlisted",len(un))
     if not un: return
     log=json.load(open(ALOG)) if os.path.exists(ALOG) else {"items":[]}
+    done={x["id"] for x in log["items"] if x.get("seo")=="done"}
+    un=[v for v in un if v["id"] not in done]; print("new unlisted to SEO",len(un))
+    if not un: return
     pl=playlists(H); names=list(pl.keys())
     global LOGO; LOGO=None
     try:
@@ -251,11 +277,13 @@ def auto(H,key):
         img=None
         try: img=base64.b64encode(urllib.request.urlopen(turl,timeout=30).read()).decode()
         except Exception as e: print("thumb get",e)
-        o=g(key,AP.format(t=s["title"],d=d[:4000],g=json.dumps(s.get("tags",[]),ensure_ascii=False)),img) or {}
+        tr=transcript(H,key,v["id"])
+        dd=d[:3000]+("\n\n[वीडियो में क्या पढ़ाया गया — इसी के आधार पर सही SEO करो]:\n"+tr[:12000] if tr else "")
+        o=g(key,AP.format(t=s["title"],d=dd,g=json.dumps(s.get("tags",[]),ensure_ascii=False)),img) or {}
         if not o.get("title"): print("seo failed, skip",v["id"]); continue
-        entry={"id":v["id"],"oldTitle":s["title"],"title":o["title"][:100],"time":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime()),"thumb":"kept"}
+        entry={"id":v["id"],"oldTitle":s["title"],"title":o["title"][:100],"time":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime()),"thumb":"kept","seo":"done","source":"captions/video" if tr else "thumbnail"}
         try:
-            if FORCE or not o.get("designed",True):
+            if DOTHUMB and (FORCE or not o.get("designed",True)):
                 jpg,how=thumb.build(o,key,LOGO)
                 os.makedirs("docs/thumbs",exist_ok=True); open(f"docs/thumbs/{v['id']}.jpg","wb").write(jpg)
                 set_thumb(H,v["id"],jpg); entry["thumb"]="new: "+how
@@ -272,10 +300,10 @@ def auto(H,key):
         sn2={"title":entry["title"],"categoryId":s["categoryId"],"description":((o.get("description") or d).strip()+tail)[:4900],"tags":tags}
         for k in("defaultLanguage","defaultAudioLanguage"):
             if s.get(k): sn2[k]=s[k]
-        st=v["status"]; st2={"privacyStatus":"public","embeddable":st.get("embeddable",True),"publicStatsViewable":st.get("publicStatsViewable",True)}
+        st=v["status"]; st2={"privacyStatus":"public" if PUB else st["privacyStatus"],"embeddable":st.get("embeddable",True),"publicStatsViewable":st.get("publicStatsViewable",True)}
         if "selfDeclaredMadeForKids" in st: st2["selfDeclaredMadeForKids"]=st["selfDeclaredMadeForKids"]
         try:
-            http(Y+"videos?part=snippet,status",{"id":v["id"],"snippet":sn2,"status":st2},H,method="PUT"); entry["status"]="public"
+            http(Y+"videos?part=snippet,status",{"id":v["id"],"snippet":sn2,"status":st2},H,method="PUT"); entry["status"]=st2["privacyStatus"]
             if p:
                 if p not in pl:
                     rr_=http(Y+"playlists?part=snippet,status",{"snippet":{"title":p},"status":{"privacyStatus":"public"}},H); pl[p]={"id":rr_["id"],"videos":set()}

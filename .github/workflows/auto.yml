@@ -1,4 +1,4 @@
-name: unlisted-auto-publish
+name: unlisted-auto-seo
 on:
   schedule: [{cron: "*/30 * * * *"}]
   workflow_dispatch:
@@ -31,6 +31,8 @@ jobs:
           LINE: ${{ vars.DESC_LINE }}
           FORCE_THUMB: ${{ github.event.inputs.force_thumb || vars.FORCE_THUMB }}
           MODE: auto
+          PUBLISH: "0"
+          THUMB: "0"
           MAXAPPLY: "20"
         run: |
           git config user.name bot; git config user.email bot@users.noreply.github.com
