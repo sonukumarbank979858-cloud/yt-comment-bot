@@ -1,0 +1,39 @@
+name: unlisted-auto-publish
+on:
+  schedule: [{cron: "*/30 * * * *"}]
+  workflow_dispatch:
+    inputs:
+      force_thumb: {description: "1 = always make new thumbnail", default: ""}
+permissions: {contents: write}
+concurrency: {group: auto, cancel-in-progress: false}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup
+        run: |
+          sudo apt-get install -y -q libraqm0 libfribidi0 >/dev/null 2>&1 || true
+          pip install -q pillow
+          python3 -c "from PIL import features;print('raqm',features.check('raqm'))"
+      - name: self test thumbnail (manual run only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p docs/thumbs
+          python3 -c "import thumb;open('docs/thumbs/_test.jpg','wb').write(thumb.make({'badge':'BA 1st Semester • हिंदी','corner':'LNMU 2026','headline':'स्वामी रामानंद के शिष्य','sub':'भक्तिकाल MCQ','points':['कबीर, रैदास, पीपा कौन थे?','राम-कृष्ण काव्य','PYQ आधारित 50 प्रश्न']},thumb.ai_image('ancient Indian saint teaching disciples in a temple')))"
+      - name: SEO + thumbnail + publish unlisted videos
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          LINK: ${{ vars.DESC_LINK }}
+          LINE: ${{ vars.DESC_LINE }}
+          FORCE_THUMB: ${{ github.event.inputs.force_thumb || vars.FORCE_THUMB }}
+          MODE: auto
+          MAXAPPLY: "20"
+        run: |
+          git config user.name bot; git config user.email bot@users.noreply.github.com
+          python3 desc.py || echo failed
+          git add docs/auto_log.json docs/thumbs 2>/dev/null || true
+          git commit -qm "auto publish" && (git push -q || (git pull -q --rebase && git push -q)) || true

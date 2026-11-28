@@ -214,6 +214,75 @@ def seo_verify(H):
     for k in range(0,len(ids),50):
         for v in http(Y+"videos?part=status&id="+",".join(ids[k:k+50]),headers=H)["items"]: print("AFTER",v["id"],v["status"]["privacyStatus"])
 
+AP="""तुम Smart Exam Academy (प्रतियोगी/बोर्ड/यूनिवर्सिटी परीक्षा की पढ़ाई का YouTube चैनल) के YouTube SEO और thumbnail designer हो।
+वीडियो title: «{t}»
+description: «{d}»
+tags: {g}
+साथ में वीडियो का अभी का thumbnail है। असली विषय (कक्षा/सेमेस्टर, विषय, इकाई/अध्याय, यूनिवर्सिटी) title, description और thumbnail पर लिखे टेक्स्ट से पहचानो। title में सिर्फ़ तारीख़ हो तो उसे विषय मत मानो; अंदाज़े से "Current Affairs" मत लिखो।
+1) designed: thumbnail पहले से डिज़ाइन किया हुआ है (बड़ा शीर्षक/चैनल नाम/टेक्स्ट वाला) तो true, अगर वीडियो का साधारण frame/धुंधला/खाली है तो false।
+2) SEO: title (100 अक्षर से कम, मुख्य keyword शुरू में, हिंदी+English), description (पहली 2 लाइनों में keywords, 3-6 लाइनें सामग्री, अंत में 3-5 hashtags, कोई लिंक/फ़ोन नहीं), tags (10-20, कुल 450 अक्षर से कम)।
+3) thumbnail के लिए: badge (जैसे "BA 1st Semester • हिंदी", 30 अक्षर तक), corner (जैसे "LNMU 2026" या "Class 12", 15 अक्षर तक, न हो तो ""), headline (हिंदी में 2-5 शब्द, बड़ा मुख्य विषय), sub (2-3 शब्द, जैसे "संपूर्ण व्याख्या" या "MCQ + PYQ"), points (3 छोटी लाइनें, हर एक 5 शब्द तक, वीडियो में क्या है), image_prompt (English में विषय से जुड़ी एक साफ़ illustration का वर्णन, बिना किसी text के, जैसे "ancient Indian saint teaching disciples in a temple")।
+सिर्फ़ JSON: {{"designed":true,"title":"...","description":"...","tags":["..."],"badge":"...","corner":"...","headline":"...","sub":"...","points":["..."],"image_prompt":"..."}}"""
+ALOG="docs/auto_log.json"
+def set_thumb(H,vid,jpg):
+    r=urllib.request.Request("https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId="+vid,data=jpg,method="POST",
+        headers={**H,"Content-Type":"image/jpeg"})
+    with urllib.request.urlopen(r,timeout=120) as f: return json.loads(f.read() or b"{}")
+def auto(H,key):
+    import base64, thumb
+    FORCE=os.environ.get("FORCE_THUMB","")=="1"
+    vids=all_videos(H); full=[]
+    for k in range(0,len(vids),50):
+        full+=http(Y+"videos?part=snippet,status&id="+",".join(v["id"] for v in vids[k:k+50]),headers=H)["items"]
+    un=[v for v in full if v["status"]["privacyStatus"]=="unlisted" and v["status"].get("uploadStatus") in ("processed","uploaded",None)]
+    print("uploads",len(vids),"unlisted",len(un))
+    if not un: return
+    log=json.load(open(ALOG)) if os.path.exists(ALOG) else {"items":[]}
+    pl=playlists(H); names=list(pl.keys())
+    for v in un[:MAXAPPLY]:
+        s=v["snippet"]; d=URL.sub("",s.get("description",""))
+        th=s.get("thumbnails",{}); turl=(th.get("maxres") or th.get("standard") or th.get("high") or th.get("medium") or {}).get("url","")
+        img=None
+        try: img=base64.b64encode(urllib.request.urlopen(turl,timeout=30).read()).decode()
+        except Exception as e: print("thumb get",e)
+        o=g(key,AP.format(t=s["title"],d=d[:4000],g=json.dumps(s.get("tags",[]),ensure_ascii=False)),img) or {}
+        if not o.get("title"): print("seo failed, skip",v["id"]); continue
+        entry={"id":v["id"],"oldTitle":s["title"],"title":o["title"][:100],"time":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime()),"thumb":"kept"}
+        try:
+            if FORCE or not o.get("designed",True):
+                art=thumb.ai_image(o.get("image_prompt") or o["title"],key)
+                jpg=thumb.make(o,art)
+                os.makedirs("docs/thumbs",exist_ok=True); open(f"docs/thumbs/{v['id']}.jpg","wb").write(jpg)
+                set_thumb(H,v["id"],jpg); entry["thumb"]="new"+("" if art else " (बिना चित्र)")
+        except Exception as e:
+            b_=getattr(e,"read",lambda:b"")()[:300].decode("utf8","ignore"); print("thumb set fail",e,b_); entry["thumb"]="fail: "+b_[:120]
+        r=g(key,PP.format(pl=json.dumps(names,ensure_ascii=False),v=f'{v["id"]}: {o["title"]}')) or {}
+        p=(r.get(v["id"]) or "").strip()[:140]
+        if p and p not in names: names.append(p)
+        tags=[]; tot=0
+        for t in o.get("tags") or []:
+            if tot+len(t)+2>480: break
+            tags.append(t); tot+=len(t)+2
+        tail=("\n\n"+(LINE+"\n" if LINE else "")+LINK) if LINK else ""
+        sn2={"title":entry["title"],"categoryId":s["categoryId"],"description":((o.get("description") or d).strip()+tail)[:4900],"tags":tags}
+        for k in("defaultLanguage","defaultAudioLanguage"):
+            if s.get(k): sn2[k]=s[k]
+        st=v["status"]; st2={"privacyStatus":"public","embeddable":st.get("embeddable",True),"publicStatsViewable":st.get("publicStatsViewable",True)}
+        if "selfDeclaredMadeForKids" in st: st2["selfDeclaredMadeForKids"]=st["selfDeclaredMadeForKids"]
+        try:
+            http(Y+"videos?part=snippet,status",{"id":v["id"],"snippet":sn2,"status":st2},H,method="PUT"); entry["status"]="public"
+            if p:
+                if p not in pl:
+                    rr_=http(Y+"playlists?part=snippet,status",{"snippet":{"title":p},"status":{"privacyStatus":"public"}},H); pl[p]={"id":rr_["id"],"videos":set()}
+                if v["id"] not in pl[p]["videos"]:
+                    http(Y+"playlistItems?part=snippet",{"snippet":{"playlistId":pl[p]["id"],"resourceId":{"kind":"youtube#video","videoId":v["id"]}}},H); pl[p]["videos"].add(v["id"])
+                entry["playlist"]=p
+        except Exception as e:
+            b_=getattr(e,"read",lambda:b"")()[:300].decode("utf8","ignore"); print("publish fail",v["id"],e,b_); entry["status"]="fail"
+        print("AUTO",json.dumps(entry,ensure_ascii=False))
+        log["items"].insert(0,entry); log["items"]=log["items"][:500]; log["updated"]=entry["time"]
+        json.dump(log,open(ALOG,"w"),ensure_ascii=False,indent=0)
+
 if __name__=="__main__":
     H={"Authorization":"Bearer "+token()}
-    {"preview":lambda:preview(H,gemini_key()),"apply":lambda:apply(H),"seo_preview":lambda:seo_preview(H,gemini_key()),"seo_apply":lambda:seo_apply(H),"seo_verify":lambda:seo_verify(H),"seo_all":lambda:(seo_preview(H,gemini_key()),seo_apply(H))}[MODE]()
+    {"preview":lambda:preview(H,gemini_key()),"apply":lambda:apply(H),"seo_preview":lambda:seo_preview(H,gemini_key()),"seo_apply":lambda:seo_apply(H),"seo_verify":lambda:seo_verify(H),"auto":lambda:auto(H,gemini_key()),"seo_all":lambda:(seo_preview(H,gemini_key()),seo_apply(H))}[MODE]()
