@@ -183,7 +183,7 @@ def seo_apply(H):
         st2={"privacyStatus":"public","embeddable":st.get("embeddable",True),"publicStatsViewable":st.get("publicStatsViewable",True)}
         if "selfDeclaredMadeForKids" in st: st2["selfDeclaredMadeForKids"]=st["selfDeclaredMadeForKids"]
         try:
-            http(Y+"videos?part=snippet,status",{"id":it["id"],"snippet":sn2,"status":st2},H,method="PUT")
+            http(Y+"videos?part=snippet,status",{"id":it["id"],"snippet":sn2,"status":st2},H,method="PUT"); print("updated",it["id"])
             p=it.get("playlist")
             if p:
                 if p not in pl:
@@ -197,6 +197,20 @@ def seo_apply(H):
         json.dump(done,open(SDONE,"w"),indent=0)
     print("published",n)
 
+def seo_verify(H):
+    pv=json.load(open(SPV)); done=json.load(open(SDONE)) if os.path.exists(SDONE) else {}
+    ids=[i["id"] for i in pv["items"]]; got={}
+    for k in range(0,len(ids),50):
+        for v in http(Y+"videos?part=snippet,status&id="+",".join(ids[k:k+50]),headers=H)["items"]: got[v["id"]]=v
+    for i in pv["items"]:
+        v=got.get(i["id"]); st=v["status"]["privacyStatus"] if v else "missing"
+        print("STATE",i["id"],st,"|",v["snippet"]["title"][:70] if v else "")
+        if st!="public": done.pop(i["id"],None)
+    json.dump(done,open(SDONE,"w"),indent=0)
+    seo_apply(H)
+    for k in range(0,len(ids),50):
+        for v in http(Y+"videos?part=status&id="+",".join(ids[k:k+50]),headers=H)["items"]: print("AFTER",v["id"],v["status"]["privacyStatus"])
+
 if __name__=="__main__":
     H={"Authorization":"Bearer "+token()}
-    {"preview":lambda:preview(H,gemini_key()),"apply":lambda:apply(H),"seo_preview":lambda:seo_preview(H,gemini_key()),"seo_apply":lambda:seo_apply(H),"seo_all":lambda:(seo_preview(H,gemini_key()),seo_apply(H))}[MODE]()
+    {"preview":lambda:preview(H,gemini_key()),"apply":lambda:apply(H),"seo_preview":lambda:seo_preview(H,gemini_key()),"seo_apply":lambda:seo_apply(H),"seo_verify":lambda:seo_verify(H),"seo_all":lambda:(seo_preview(H,gemini_key()),seo_apply(H))}[MODE]()
