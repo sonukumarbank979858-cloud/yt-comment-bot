@@ -1,42 +1,44 @@
 name: unlisted-auto-seo
 on:
-  schedule: [{cron: "*/30 * * * *"}]
+  schedule: [{cron: "7 */3 * * *"}]
   workflow_dispatch:
     inputs:
       force_thumb: {description: "1 = always make new thumbnail", default: ""}
-permissions: {contents: write}
+permissions: {contents: write, actions: write}
 concurrency: {group: auto, cancel-in-progress: false}
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
-      - name: setup
+      - name: deps
         run: |
           sudo apt-get install -y -q libraqm0 libfribidi0 >/dev/null 2>&1 || true
           pip install -q pillow
-          python3 -c "from PIL import features;print('raqm',features.check('raqm'))"
-      - name: self test thumbnail (manual run only)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          mkdir -p docs/thumbs
-          python3 -c "import thumb;j,h=thumb.build({'subject':'गणित','subject_en':'Math','chapter':'अध्याय - 3','topic':'प्रतिशत','topic_en':'Percentage','checklist':['प्रतिशत का परिचय','प्रतिशत का सूत्र','प्रतिशत वृद्धि','प्रतिशत कमी','लाभ एवं हानि','छूट (Discount)'],'fact_title':'प्रतिशत का सूत्र','facts':['25% = 1/4 = 0.25','50% = 1/2 = 0.50','75% = 3/4 = 0.75'],'image_prompt':'calculator, pie chart and rising bar graph'});print('test via',h);open('docs/thumbs/_test.jpg','wb').write(j)"
-      - name: SEO + thumbnail + publish unlisted videos
+      - name: watch unlisted videos every 15 min (~5.5 h), then restart itself
         env:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          LINK: ${{ vars.DESC_LINK }}
-          LINE: ${{ vars.DESC_LINE }}
-          FORCE_THUMB: ${{ github.event.inputs.force_thumb || vars.FORCE_THUMB }}
           MODE: auto
           PUBLISH: "0"
           THUMB: "0"
-          MAXAPPLY: "20"
+          LINK: ${{ vars.DESC_LINK }}
+          LINE: ${{ vars.DESC_LINE }}
+          FORCE_THUMB: ${{ github.event.inputs.force_thumb }}
+          MAXAPPLY: "25"
         run: |
           git config user.name bot; git config user.email bot@users.noreply.github.com
-          python3 desc.py || echo failed
-          git add -A docs || true
-          git commit -qm "auto seo log" || true
-          for i in 1 2 3 4 5; do git pull -q --rebase -X theirs && git push -q && break; sleep 7; done
+          for i in $(seq 1 21); do
+            git pull -q --rebase -X theirs || true
+            python3 desc.py || echo failed
+            git add -A docs || true
+            git commit -qm "auto seo log" || true
+            for k in 1 2 3 4 5; do git pull -q --rebase -X theirs && git push -q && break; sleep 7; done
+            [ $i -lt 21 ] && sleep 840
+          done
+      - name: restart
+        if: always()
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: gh workflow run auto.yml --ref main -R ${{ github.repository }} || true

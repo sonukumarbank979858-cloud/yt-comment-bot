@@ -239,8 +239,13 @@ def transcript(H,key,vid):
                 t=urllib.request.urlopen(r,timeout=60).read().decode("utf8","ignore")
                 t=re.sub(r"\d+\n[\d:,]+ --> [\d:,]+\n","",t); t=re.sub(r"\n+"," ",t)
                 if len(t)>200: print("captions",vid,len(t)); return t[:15000]
-            except Exception as e: print("cap dl",vid,str(e)[:80])
-    except Exception as e: print("cap list",vid,str(e)[:80])
+            except Exception as e:
+                b_=getattr(e,"read",lambda:b"")()[:200].decode("utf8","ignore"); print("cap dl",vid,str(e)[:80],b_[:100])
+                if "quota" in b_.lower(): raise SystemExit("quota")
+    except SystemExit: raise
+    except Exception as e:
+        b_=getattr(e,"read",lambda:b"")()[:200].decode("utf8","ignore"); print("cap list",vid,str(e)[:80],b_[:100])
+        if "quota" in b_.lower(): raise SystemExit("quota")
     for m in ["gemini-3.1-flash-lite","gemini-2.5-flash"]:
         try:
             body={"contents":[{"parts":[{"file_data":{"file_uri":"https://www.youtube.com/watch?v="+vid}},{"text":"इस वीडियो में पढ़ाए गए सभी मुख्य विषय, प्रश्न, सूत्र और बातें हिंदी में विस्तार से (300-500 शब्द) लिखो।"}]}]}
@@ -281,7 +286,7 @@ def auto(H,key):
         dd=d[:3000]+("\n\n[वीडियो में क्या पढ़ाया गया — इसी के आधार पर सही SEO करो]:\n"+tr[:12000] if tr else "")
         o=g(key,AP.format(t=s["title"],d=dd,g=json.dumps(s.get("tags",[]),ensure_ascii=False)),img) or {}
         if not o.get("title"): print("seo failed, skip",v["id"]); continue
-        entry={"id":v["id"],"oldTitle":s["title"],"title":o["title"][:100],"time":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime()),"thumb":"kept","seo":"done","source":"captions/video" if tr else "thumbnail"}
+        entry={"id":v["id"],"oldTitle":s["title"],"title":o["title"][:100],"time":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime()),"thumb":"kept","source":"captions/video" if tr else "thumbnail"}
         try:
             if DOTHUMB and (FORCE or not o.get("designed",True)):
                 jpg,how=thumb.build(o,key,LOGO)
@@ -317,6 +322,8 @@ def auto(H,key):
                 entry["playlist"]=p
         except Exception as e:
             b_=getattr(e,"read",lambda:b"")()[:300].decode("utf8","ignore"); print("publish fail",v["id"],e,b_); entry["status"]="fail"
+            if "quota" in b_.lower(): print("quota hit, stop"); break
+        if entry.get("status")!="fail": entry["seo"]="done"
         print("AUTO",json.dumps(entry,ensure_ascii=False))
         log["items"].insert(0,entry); log["items"]=log["items"][:500]; log["updated"]=entry["time"]
         json.dump(log,open(ALOG,"w"),ensure_ascii=False,indent=0)
