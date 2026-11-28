@@ -22,12 +22,14 @@ PREV="docs/desc_preview.json"; DONE="docs/desc_done.json"
 Y="https://www.googleapis.com/youtube/v3/"
 URL=re.compile(r'(https?://\S+|www\.\S+|\b\S+\.(com|in|me|ly|be|org|net|app|io)/\S*)',re.I)
 
-def g(key,prompt):
-    for m in ["gemini-3.5-flash","gemini-3.1-flash-lite","gemini-3.5-flash"]:
+def g(key,prompt,img=None):
+    parts=[{"text":prompt}]
+    if img: parts=[{"inline_data":{"mime_type":"image/jpeg","data":img}}]+parts
+    for m in ["gemini-3.1-flash-lite","gemini-3.5-flash","gemini-3.1-flash-lite","gemini-3.5-flash"]:
         time.sleep(4)
         try:
             j=http(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}",
-              {"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"responseMimeType":"application/json","temperature":0.3}})
+              {"contents":[{"parts":parts}],"generationConfig":{"responseMimeType":"application/json","temperature":0.3}})
             return json.loads(j["candidates"][0]["content"]["parts"][0]["text"])
         except Exception as e: print("gemini",m,e)
     return None
@@ -132,6 +134,7 @@ SP="""तुम Smart Exam Academy (प्रतियोगी/बोर्ड/
 वीडियो title: «{t}»
 description: «{d}»
 tags: {g}
+साथ में वीडियो का thumbnail है: असली विषय (कक्षा/सेमेस्टर, विषय, इकाई/अध्याय, यूनिवर्सिटी जैसे LNMU) thumbnail पर लिखे टेक्स्ट से पढ़ो। अगर title में सिर्फ़ तारीख़ है तो तारीख़ को विषय मत मानो और "Current Affairs" मत लिखो जब तक thumbnail पर वह न हो।
 काम: इसी वीडियो के विषय के अनुसार search में आने लायक SEO करो। title: 100 अक्षर से कम, मुख्य keyword शुरू में, विषय/अध्याय/परीक्षा का नाम, हिंदी+English keywords मिलाकर (जैसे अभी हैं), clickbait या झूठ नहीं। description: पहली 2 लाइनों में मुख्य keywords, फिर 3-6 लाइनों में वीडियो में क्या है, अंत में 3-5 hashtags; timestamps हों तो रखो; कोई लिंक/फ़ोन नंबर नहीं। tags: 10-20 relevant tags (हिंदी व English), कुल 450 अक्षर से कम।
 सिर्फ़ JSON: {{"title":"...","description":"...","tags":["..."]}}"""
 SPV="docs/seo_preview.json"; SDONE="docs/seo_done.json"
@@ -146,14 +149,18 @@ def seo_preview(H,key):
     prev={i["id"]:i for i in json.load(open(PREV))["items"]} if os.path.exists(PREV) else {}
     for v in un:
         s=v["snippet"]; d=URL.sub("",s.get("description",""))
-        o=g(key,SP.format(t=s["title"],d=d[:4000],g=json.dumps(s.get("tags",[]),ensure_ascii=False))) or {}
-        th=s.get("thumbnails",{}); thumb=(th.get("maxres") or th.get("high") or th.get("medium") or {}).get("url","")
+        th=s.get("thumbnails",{}); thumb=(th.get("maxres") or th.get("standard") or th.get("high") or th.get("medium") or {}).get("url","")
+        img=None
+        try:
+            import base64; img=base64.b64encode(urllib.request.urlopen(thumb,timeout=30).read()).decode()
+        except Exception as e: print("thumb",e)
+        o=g(key,SP.format(t=s["title"],d=d[:4000],g=json.dumps(s.get("tags",[]),ensure_ascii=False)),img) or {}
         p=prev.get(v["id"],{}).get("playlist","")
         if not p and v["id"] not in inpl:
-            r=g(key,PP.format(pl=json.dumps(names,ensure_ascii=False),v=f'{v["id"]}: {s["title"]}')) or {}
+            r=g(key,PP.format(pl=json.dumps(names,ensure_ascii=False),v=f'{v["id"]}: {(o.get("title") or s["title"])}')) or {}
             p=(r.get(v["id"]) or "").strip()[:140]
         out.append({"id":v["id"],"oldTitle":s["title"],"title":(o.get("title") or s["title"])[:100],"old":s.get("description",""),
-            "new":o.get("description") or d,"tags":o.get("tags") or s.get("tags",[]),"thumb":thumb,"playlist":p,"newPlaylist":bool(p) and p not in pl})
+            "new":o.get("description") or d,"tags":o.get("tags") or s.get("tags",[]),"thumb":thumb,"ok":bool(o.get("title")),"playlist":p,"newPlaylist":bool(p) and p not in pl})
         json.dump({"items":out,"updated":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime())},open(SPV,"w"),ensure_ascii=False,indent=0)
     json.dump({"items":out,"updated":time.strftime("%Y-%m-%d %H:%M UTC",time.gmtime())},open(SPV,"w"),ensure_ascii=False,indent=0)
     print("seo preview",len(out))
@@ -161,7 +168,7 @@ def seo_apply(H):
     pv=json.load(open(SPV)); done=json.load(open(SDONE)) if os.path.exists(SDONE) else {}
     pl=playlists(H); n=0
     for it in pv["items"]:
-        if it["id"] in done or n>=MAXAPPLY: continue
+        if it["id"] in done or n>=MAXAPPLY or not it.get("ok",True): continue
         v=http(Y+"videos?part=snippet,status&id="+it["id"],headers=H)["items"]
         if not v: continue
         sn=v[0]["snippet"]; st=v[0]["status"]
@@ -192,4 +199,4 @@ def seo_apply(H):
 
 if __name__=="__main__":
     H={"Authorization":"Bearer "+token()}
-    {"preview":lambda:preview(H,gemini_key()),"apply":lambda:apply(H),"seo_preview":lambda:seo_preview(H,gemini_key()),"seo_apply":lambda:seo_apply(H)}[MODE]()
+    {"preview":lambda:preview(H,gemini_key()),"apply":lambda:apply(H),"seo_preview":lambda:seo_preview(H,gemini_key()),"seo_apply":lambda:seo_apply(H),"seo_all":lambda:(seo_preview(H,gemini_key()),seo_apply(H))}[MODE]()
